@@ -175,8 +175,12 @@ public:
 		, StructuredArchive(Formatter)
 		, RootSlot(StructuredArchive.Open())
 		, RootRecord(RootSlot.EnterRecord())
+		, VersionOffset(0)
 	{
 		static_cast<FArchive&>(ProxyArchive).SetIsTextFormat(bIsTextFormat);
+
+		// Ensure that we're using the latest save game version
+		Archive.UsingCustomVersion(FSaveGameVersion::GUID);
 	}
 	
 	bool Save();
@@ -217,11 +221,18 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Save()
 		SerializeHeader();
 		SerializeActors();
 		SerializeDestroyedActors();
+
+		if (!bIsTextFormat)
+		{
+			// Store the version position so that we can serialize it in the header
+			VersionOffset = Archive.Tell();
+		}
+		
 		SerializeVersions();
 
 		if (!bIsTextFormat)
 		{
-			// We've likely updated our header, let's rewrite it
+			// We've updated the VersionOffset, let's go back to the start and rewrite the header
 			Archive.Seek(0);
 			SerializeHeader();
 		}
@@ -231,6 +242,7 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Save()
 		
 		if (!bIsTextFormat && !bIsLoading)
 		{
+			// Compress the save game data
 			TArray<uint8> CompressedData;
 			FSaveGameMemoryArchive CompressorArchive(CompressedData);
 			SerializeCompressedData<false>(CompressorArchive, Data);
@@ -253,6 +265,7 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Load()
 	ISaveGameSystem* SaveSystem = IPlatformFeaturesModule::Get().GetSaveGameSystem();
 	if (SaveSystem && SaveSystem->LoadGame(false, *GetSaveName(), 0, CompressedData))
 	{
+		// Decompress the loaded save game data
 		FSaveGameMemoryArchive CompressorArchive(CompressedData);
 		SerializeCompressedData<true>(CompressorArchive, Data);
 		
@@ -271,6 +284,7 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Load()
 			SerializeVersions();
 		}
 
+		// If we don't have a map, we should bail
 		if (MapName.IsEmpty())
 		{
 			return false;
@@ -284,6 +298,7 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Load()
 			return false;
 		}
 
+		// When our map has loaded, call the OnMapLoad method
 		FCoreUObjectDelegates::PostLoadMapWithWorld.AddThreadSafeSP(this, &TSaveGameSerializer::OnMapLoad);
 		World->SeamlessTravel(MapName, true);
 
@@ -312,6 +327,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::OnMapLoad(UWorld* World)
 	FCoreUObjectDelegates::PostLoadMapWithWorld.RemoveAll(this);
 	check(SaveGameSubsystem->GetWorld() == World);
 
+	// Actually serialize the actors
 	SerializeActors();
 	SerializeDestroyedActors();
 
@@ -321,6 +337,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::OnMapLoad(UWorld* World)
 template <bool bIsLoading, bool bIsTextFormat>
 void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeHeader()
 {
+	// If we already have a map name, don't change it
 	if (!bIsLoading && MapName.IsEmpty())
 	{
 		check(SaveGameSubsystem.IsValid());
@@ -333,6 +350,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeHeader()
 
 	if (!bIsTextFormat)
 	{
+		// We're a binary archive, so let's serialize where the version is
+		// so that we can read it before loading anything
 		RootRecord << SA_VALUE(TEXT("VersionsOffset"), VersionOffset);
 	}
 }
@@ -354,6 +373,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 	
 	if (bIsLoading)
 	{
+		// Iterate through our live actors so that we can map their SpawnIDs
 		for (const TWeakObjectPtr<AActor>& ActorPtr : SaveGameSubsystem->SaveGameActors)
 		{
 			AActor* Actor = ActorPtr.Get();
@@ -372,6 +392,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 
 		Actors.SetNumZeroed(NumActors);
 
+		// Iterate through the saved actors and spawn or find their live equivalent
 		for (int32 ActorIdx = 0; ActorIdx < NumActors; ++ActorIdx)
 		{
 			AActor*& Actor = Actors[ActorIdx];
@@ -428,9 +449,9 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 	}
 	
 	{
-		// Actually serialize the actor data
 		if (bIsLoading && !bIsTextFormat)
 		{
+			// Go back to the start of the actor data
 			Archive.Seek(ActorsPosition);
 		}
 		
@@ -438,6 +459,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 
 		auto ActorsIt = SaveGameSubsystem->SaveGameActors.CreateConstIterator();
 		
+		// Actually serialize the actor data and their properties
 		for (int32 ActorIdx = 0; ActorIdx < NumActors; ++ActorIdx)
 		{
 			AActor* Actor;
@@ -476,8 +498,6 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeDestroyedActors()
 {
 	check(SaveGameSubsystem.IsValid());
 	const UWorld* World = SaveGameSubsystem->GetWorld();
-
-	Archive.UsingCustomVersion(FSaveGameVersion::GUID);
 	
 	int32 NumDestroyedActors;
 
@@ -502,6 +522,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeDestroyedActors()
 
 		if (!bIsLoading)
 		{
+			// Only store the object name without the prefix and full path
 			FString ActorSubPath = (*DestroyedActorsIt).GetSubPathString();
 			ActorSubPath.RemoveFromStart(LEVEL_SUBPATH_PREFIX);
 			ActorName = *ActorSubPath;
@@ -513,6 +534,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeDestroyedActors()
 
 		if (bIsLoading)
 		{
+			// Find the live actor in the level
 			if (AActor* DestroyedActor = FindObjectFast<AActor>(World->GetCurrentLevel(), ActorName))
 			{
 				// Be sure to add any valid destroyed actors back into the array for saving later!
@@ -531,18 +553,15 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeVersions()
 	
 	if (!bIsLoading)
 	{
+		// Grab a copy of our archive's current versions
 		VersionContainer = Archive.GetCustomVersions();
-		
-		if (!bIsTextFormat)
-		{
-			VersionOffset = Archive.Tell();
-		}
 	}
 
 	VersionContainer.Serialize(RootRecord.EnterField(TEXT("Versions")));
 
 	if (bIsLoading)
 	{
+		// Assign our serialized versions
 		Archive.SetCustomVersions(VersionContainer);
 	}
 }
@@ -572,11 +591,13 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActor(FStructuredA
 
 	FStructuredArchive::FSlot ActorSlot = ActorMap.EnterElement(ActorName);
 
+	// If we have a class, we're a spawned actor
 	if (TOptional<FStructuredArchive::FSlot> ClassSlot = ActorSlot.TryEnterAttribute(TEXT("Class"), !Class.IsNull()))
 	{
 		ClassSlot.GetValue() << Class;
 	}
 
+	// If we have a GUID, we're a spawn actor that needs to be mapped by GUID
 	TOptional<FStructuredArchive::FSlot> GuidSlot = ActorSlot.TryEnterAttribute(TEXT("GUID"), SpawnID.IsValid());
 	if (GuidSlot.IsSet())
 	{
@@ -587,6 +608,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActor(FStructuredA
 
 	if (!bIsTextFormat)
 	{
+		// Pre-write how much data (in bytes) was serialized for this actor
 		Archive << DataSize;
 	}
 
@@ -606,7 +628,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActor(FStructuredA
 			const uint64 EndDataPosition = Archive.Tell();
 			DataSize = EndDataPosition - BeginDataPosition;
 
-			// Store the amount of data we've serialized, back before the actual data
+			// Store the amount of data we've serialized (in bytes), back before the actual data
 			Archive.Seek(BeginDataPosition - sizeof(DataSize));
 			Archive << DataSize;
 

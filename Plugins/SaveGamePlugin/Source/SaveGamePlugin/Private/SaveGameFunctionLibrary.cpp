@@ -59,7 +59,8 @@ bool USaveGameFunctionLibrary::SerializeActorTransform(FSaveGameArchive& Archive
 	{
 		const bool bIsMovable = Actor->IsRootComponentMovable();
 		FStructuredArchive::FRecord& Record = Archive.GetRecord();
-		
+
+		// Save into a slot only if the actor is movable
 		if (TOptional<FStructuredArchive::FSlot> TransformSlot = Record.TryEnterField(TEXT("Transform"), bIsMovable))
 		{
 			const bool bIsLoading = Record.GetUnderlyingArchive().IsLoading();
@@ -70,10 +71,12 @@ bool USaveGameFunctionLibrary::SerializeActorTransform(FSaveGameArchive& Archive
 				Transform = Actor->GetActorTransform();
 			}
 
+			// Serialize the transform
 			TransformSlot.GetValue() << Transform;
 
 			if (bIsLoading && bIsMovable)
 			{
+				// If the actor is movable, set its transform
 				Actor->SetActorTransform(Transform, false, nullptr, ETeleportType::TeleportPhysics);
 			}
 		}
@@ -142,10 +145,12 @@ int32 USaveGameFunctionLibrary::UseCustomVersion(FSaveGameArchive& Archive, cons
 		{
 			if (UnderlyingArchive.IsLoading())
 			{
+				// If the archive has one, return its saved version
 				const FCustomVersion* CustomVersion = UnderlyingArchive.GetCustomVersions().GetVersion(VersionId);
 				return CustomVersion ? CustomVersion->Version : INDEX_NONE;
 			}
 
+			// Get the latest version and save it
 			const int32 Version = VersionEnum->GetMaxEnumValue() - 1;
 			UnderlyingArchive.SetCustomVersion(VersionId, Version, VersionEnum->GetFName());
 			return Version;
