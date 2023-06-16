@@ -2,8 +2,9 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "SaveGameObject.h"
+
+#include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "SaveGameFunctionLibrary.generated.h"
 
@@ -56,4 +57,17 @@ public:
 	UFUNCTION(BlueprintCallable, CustomThunk, Category="SaveGamePlugin|Serialize", meta=(CustomStructureParam="Value", AdvancedDisplay="bSave"))
 	static bool SerializeItem(UPARAM(ref) FSaveGameArchive& Archive, UPARAM(ref) int32& Value, bool bSave = true);
 	DECLARE_FUNCTION(execSerializeItem);
+
+	/**
+	 * Serializes the specified version.
+	 *
+	 * OnSave: Stores the latest value of the version to the archive.
+	 * OnLoad: Reads the version from the save game archive (if any)
+	 * 
+	 * @param Archive The archive that the save game is serializing
+	 * @param VersionEnum The enum of the version we want to serialize
+	 * @return The version that was serialized (-1 if not exist or no version)
+	 */
+	UFUNCTION(BlueprintCallable, Category="SaveGamePlugin|Serialize")
+	static int32 UseCustomVersion(UPARAM(ref) FSaveGameArchive& Archive, const UEnum* VersionEnum);
 };

@@ -16,7 +16,8 @@ public class SaveGamePlugin : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"CoreUObject",
-			"Engine",	
+			"Engine",
+			"DeveloperSettings"
 		});
 		
 		if (Target.Type == TargetType.Editor)

@@ -2,6 +2,8 @@
 
 #include "SaveGameFunctionLibrary.h"
 
+#include "SaveGameSettings.h"
+
 #if WITH_EDITOR
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Kismet2/KismetDebugUtilities.h"
@@ -127,4 +129,28 @@ DEFINE_FUNCTION(USaveGameFunctionLibrary::execSerializeItem)
 	}
 	
 	P_NATIVE_END;
+}
+
+int32 USaveGameFunctionLibrary::UseCustomVersion(FSaveGameArchive& Archive, const UEnum* VersionEnum)
+{
+	if (Archive.IsValid() && IsValid(VersionEnum))
+	{
+		FArchive& UnderlyingArchive = Archive.GetRecord().GetUnderlyingArchive();
+		const FGuid VersionId = GetDefault<USaveGameSettings>()->GetVersionId(VersionEnum);
+
+		if (VersionId.IsValid())
+		{
+			if (UnderlyingArchive.IsLoading())
+			{
+				const FCustomVersion* CustomVersion = UnderlyingArchive.GetCustomVersions().GetVersion(VersionId);
+				return CustomVersion ? CustomVersion->Version : INDEX_NONE;
+			}
+
+			const int32 Version = VersionEnum->GetMaxEnumValue() - 1;
+			UnderlyingArchive.SetCustomVersion(VersionId, Version, VersionEnum->GetFName());
+			return Version;
+		}
+	}
+
+	return INDEX_NONE;
 }

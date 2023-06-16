@@ -3,6 +3,7 @@
 
 # Rider user files
 .idea/
+*.DotSettings.user
 
 # Compiled Object files
 *.slo
@@ -75,3 +76,6 @@ Plugins/*/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# Platform specific config overrides (not used in this sample project)
+Platforms/

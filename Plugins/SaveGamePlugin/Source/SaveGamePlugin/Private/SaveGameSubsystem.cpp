@@ -189,6 +189,7 @@ private:
 	void SerializeHeader();
 	void SerializeActors();
 	void SerializeDestroyedActors();
+	void SerializeVersions();
 
 	void SerializeActor(FStructuredArchive::FMap& ActorMap, AActor*& Actor, TFunction<void(const FString&, const FSoftClassPath&, const FGuid&, FStructuredArchive::FSlot&)>&& BodyFunction);
 	
@@ -203,6 +204,7 @@ private:
 	FStructuredArchive::FRecord RootRecord;
 
 	FString MapName;
+	uint64 VersionOffset;
 };
 
 template <bool bIsLoading, bool bIsTextFormat>
@@ -215,6 +217,14 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Save()
 		SerializeHeader();
 		SerializeActors();
 		SerializeDestroyedActors();
+		SerializeVersions();
+
+		if (!bIsTextFormat)
+		{
+			// We've likely updated our header, let's rewrite it
+			Archive.Seek(0);
+			SerializeHeader();
+		}
 
 		// Be sure to close this, as you'll be missing closed braces for JSON archives
 		StructuredArchive.Close();
@@ -247,6 +257,19 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Load()
 		SerializeCompressedData<true>(CompressorArchive, Data);
 		
 		SerializeHeader();
+		
+		{
+			const uint64 InitialPosition = Archive.Tell();
+
+			// After serializing versions, go back to initial position
+			ON_SCOPE_EXIT
+			{
+				Archive.Seek(InitialPosition);
+			};
+
+			Archive.Seek(VersionOffset);
+			SerializeVersions();
+		}
 
 		if (MapName.IsEmpty())
 		{
@@ -277,7 +300,7 @@ FString TSaveGameSerializer<bIsLoading, bIsTextFormat>::GetSaveName()
 
 	if (bIsTextFormat)
 	{
-		SaveName += TEXT(".txt");
+		SaveName += TEXT(".json");
 	}
 
 	return SaveName;
@@ -298,7 +321,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::OnMapLoad(UWorld* World)
 template <bool bIsLoading, bool bIsTextFormat>
 void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeHeader()
 {
-	if (!bIsLoading)
+	if (!bIsLoading && MapName.IsEmpty())
 	{
 		check(SaveGameSubsystem.IsValid());
 		const UWorld* World = SaveGameSubsystem->GetWorld();
@@ -307,6 +330,11 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeHeader()
 	}
 	
 	RootRecord << SA_VALUE(TEXT("Map"), MapName);
+
+	if (!bIsTextFormat)
+	{
+		RootRecord << SA_VALUE(TEXT("VersionsOffset"), VersionOffset);
+	}
 }
 
 template<bool bIsLoading, bool bIsTextFormat>
@@ -493,6 +521,29 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeDestroyedActors()
 				DestroyedActor->Destroy();
 			}
 		}
+	}
+}
+
+template <bool bIsLoading, bool bIsTextFormat>
+void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeVersions()
+{
+	FCustomVersionContainer VersionContainer;
+	
+	if (!bIsLoading)
+	{
+		VersionContainer = Archive.GetCustomVersions();
+		
+		if (!bIsTextFormat)
+		{
+			VersionOffset = Archive.Tell();
+		}
+	}
+
+	VersionContainer.Serialize(RootRecord.EnterField(TEXT("Versions")));
+
+	if (bIsLoading)
+	{
+		Archive.SetCustomVersions(VersionContainer);
 	}
 }
 
