@@ -7,108 +7,108 @@
 template<bool bIsLoading>
 struct TSaveGameProxyArchive final : public FNameAsStringProxyArchive
 {
-    TSaveGameProxyArchive(FArchive& InInnerArchive)
-        : FNameAsStringProxyArchive(InInnerArchive)
-    {
-        ArIsSaveGame = true;
-    }
+	TSaveGameProxyArchive(FArchive& InInnerArchive)
+		: FNameAsStringProxyArchive(InInnerArchive)
+	{
+		ArIsSaveGame = true;
+	}
 
-    void AddRedirect(const FSoftObjectPath& From, const FSoftObjectPath& To)
-    {
-        if (From != To)
-        {
-            Redirects.Add(From, To);
-        }
-    }
+	void AddRedirect(const FSoftObjectPath& From, const FSoftObjectPath& To)
+	{
+		if (From != To)
+		{
+			Redirects.Add(From, To);
+		}
+	}
 
-    virtual FArchive& operator<<(FSoftObjectPath& Value) override
-    {
-        Value.SerializePath(*this);
+	virtual FArchive& operator<<(FSoftObjectPath& Value) override
+	{
+		Value.SerializePath(*this);
 		
-        // If we have a defined core redirect, make sure that it's applied
-        if (bIsLoading && !Value.IsNull())
-        {
-            Value.FixupCoreRedirects();
-        }
+		// If we have a defined core redirect, make sure that it's applied
+		if (bIsLoading && !Value.IsNull())
+		{
+			Value.FixupCoreRedirects();
+		}
 
-        if (bIsLoading && Redirects.Contains(Value))
-        {
-            Value = Redirects[Value];
-        }
+		if (bIsLoading && Redirects.Contains(Value))
+		{
+			Value = Redirects[Value];
+		}
 		
-        return *this;
-    }
+		return *this;
+	}
 
-    virtual FArchive& operator<<(FSoftObjectPtr& Value) override
-    {
-        FSoftObjectPath Path;
+	virtual FArchive& operator<<(FSoftObjectPtr& Value) override
+	{
+		FSoftObjectPath Path;
 
-        if (!bIsLoading)
-        {
-            Path = Value.ToSoftObjectPath();
-        }
+		if (!bIsLoading)
+		{
+			Path = Value.ToSoftObjectPath();
+		}
 
-        *this << Path;
+		*this << Path;
 
-        if (bIsLoading)
-        {
-            Value = FSoftObjectPtr(Path);
-        }
+		if (bIsLoading)
+		{
+			Value = FSoftObjectPtr(Path);
+		}
 
-        return *this;
-    }
+		return *this;
+	}
 
-    virtual FArchive& operator<<(UObject*& Value) override
-    {
-        return SerializeObject(Value);
-    }
+	virtual FArchive& operator<<(UObject*& Value) override
+	{
+		return SerializeObject(Value);
+	}
 	
-    virtual FArchive& operator<<(FWeakObjectPtr& Value) override
-    {
-        return SerializeObject(Value);
-    }
+	virtual FArchive& operator<<(FWeakObjectPtr& Value) override
+	{
+		return SerializeObject(Value);
+	}
 	
-    virtual FArchive& operator<<(FObjectPtr& Value) override
-    {
-        return SerializeObject(Value);
-    }
+	virtual FArchive& operator<<(FObjectPtr& Value) override
+	{
+		return SerializeObject(Value);
+	}
 
 private:
-    TMap<FSoftObjectPath, FSoftObjectPath> Redirects;
+	TMap<FSoftObjectPath, FSoftObjectPath> Redirects;
 
-    template<typename ObjectType>
-    static FSoftObjectPath ToSoftObjectPath(const ObjectType& Value)
-    {
-        return FSoftObjectPath(Value);
-    }
-    static FSoftObjectPath ToSoftObjectPath(const FWeakObjectPtr& Value)
-    {
-        return FSoftObjectPath(Value.Get());
-    }
+	template<typename ObjectType>
+	static FSoftObjectPath ToSoftObjectPath(const ObjectType& Value)
+	{
+		return FSoftObjectPath(Value);
+	}
+	static FSoftObjectPath ToSoftObjectPath(const FWeakObjectPtr& Value)
+	{
+		return FSoftObjectPath(Value.Get());
+	}
 
-    template<typename ObjectType>
-    FArchive& SerializeObject(ObjectType& Value)
-    {
-        FSoftObjectPath Path;
+	template<typename ObjectType>
+	FArchive& SerializeObject(ObjectType& Value)
+	{
+		FSoftObjectPath Path;
 
-        if (!bIsLoading)
-        {
-            Path = ToSoftObjectPath(Value);
-        }
+		if (!bIsLoading)
+		{
+			Path = ToSoftObjectPath(Value);
+		}
 
-        *this << Path;
+		*this << Path;
 
-        if (bIsLoading)
-        {
-            UObject* Object = Path.ResolveObject();
-            Value = Object;
+		if (bIsLoading)
+		{
+			UObject* Object = Path.ResolveObject();
+			Value = Object;
 
-            if (!IsValid(Object) && !Path.IsNull())
-            {
-                Value = Path.TryLoad();
-            }
-        }
+			if (!IsValid(Object) && !Path.IsNull())
+			{
+				Value = Path.TryLoad();
+			}
+		}
 
-        return *this;
-    }
+		return *this;
+	}
 };

@@ -57,6 +57,13 @@ template <bool bIsLoading, bool bIsTextFormat>
 bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Save()
 {
 	check(!bIsLoading);
+
+	TRACE_BOOKMARK(TEXT("Begin: SaveGame[%s]"), bIsTextFormat ? TEXT("Text") : TEXT("Binary"));
+
+	ON_SCOPE_EXIT
+	{
+		TRACE_BOOKMARK(TEXT("End: SaveGame[%s]"), bIsTextFormat ? TEXT("Text") : TEXT("Binary"));
+	};
 	
 	if (ISaveGameSystem* SaveSystem = IPlatformFeaturesModule::Get().GetSaveGameSystem())
 	{
@@ -103,6 +110,8 @@ bool TSaveGameSerializer<bIsLoading, bIsTextFormat>::Load()
 {
 	check(bIsLoading && !bIsTextFormat);
 
+	TRACE_BOOKMARK(TEXT("Begin: LoadSaveGame[%s]"), bIsTextFormat ? TEXT("Text") : TEXT("Binary"));
+	
 	TArray<uint8> CompressedData;
 	ISaveGameSystem* SaveSystem = IPlatformFeaturesModule::Get().GetSaveGameSystem();
 	if (SaveSystem && SaveSystem->LoadGame(false, *GetSaveName(), 0, CompressedData))
@@ -174,11 +183,15 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::OnMapLoad(UWorld* World)
 	SerializeDestroyedActors();
 
 	SaveGameSubsystem->OnLoadCompleted();
+	
+	TRACE_BOOKMARK(TEXT("End: LoadSaveGame[%s]"), bIsTextFormat ? TEXT("Text") : TEXT("Binary"));
 }
 
 template <bool bIsLoading, bool bIsTextFormat>
 void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeHeader()
 {
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_SaveGame_SerializeHeader);
+	
 	// If we already have a map name, don't change it
 	if (!bIsLoading && MapName.IsEmpty())
 	{
@@ -201,6 +214,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeHeader()
 template<bool bIsLoading, bool bIsTextFormat>
 void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 {
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_SaveGame_SerializeActors);
+	
 	// This serialize method assumes that we don't have any streamed/sub levels
 	check(SaveGameSubsystem.IsValid());
 	UWorld* World = SaveGameSubsystem->GetWorld();
@@ -215,6 +230,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 	
 	if (bIsLoading)
 	{
+		QUICK_SCOPE_CYCLE_COUNTER(STAT_SaveGame_InitializeActors);
+		
 		// Iterate through our live actors so that we can map their SpawnIDs
 		for (const TWeakObjectPtr<AActor>& ActorPtr : SaveGameSubsystem->SaveGameActors)
 		{
@@ -291,6 +308,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 	}
 	
 	{
+		QUICK_SCOPE_CYCLE_COUNTER(STAT_SaveGame_SerializeActorData);
+		
 		if (bIsLoading && !bIsTextFormat)
 		{
 			// Go back to the start of the actor data
@@ -327,7 +346,7 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 				FStructuredArchive::FRecord CustomDataRecord = CustomDataSlot.EnterRecord();
 
 				// Encapsulate the record in something a Blueprint can access 
-				FSaveGameArchive SaveGameArchive(CustomDataRecord);
+				FSaveGameArchive SaveGameArchive(CustomDataRecord, Actor);
 								
 				ISaveGameObject::Execute_OnSerialize(Actor, SaveGameArchive, bIsLoading);
 			});
@@ -338,6 +357,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 template <bool bIsLoading, bool bIsTextFormat>
 void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeDestroyedActors()
 {
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_SaveGame_SerializeDestroyedActors);
+	
 	check(SaveGameSubsystem.IsValid());
 	const UWorld* World = SaveGameSubsystem->GetWorld();
 	
@@ -391,6 +412,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeDestroyedActors()
 template <bool bIsLoading, bool bIsTextFormat>
 void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeVersions()
 {
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_SaveGame_SerializeVersions);
+	
 	FCustomVersionContainer VersionContainer;
 	
 	if (!bIsLoading)
@@ -411,6 +434,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeVersions()
 template <bool bIsLoading, bool bIsTextFormat>
 void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActor(FStructuredArchive::FMap& ActorMap, AActor*& Actor, TFunction<void(const FString&, const FSoftClassPath&, const FGuid&, FStructuredArchive::FSlot&)>&& BodyFunction)
 {
+	QUICK_SCOPE_CYCLE_COUNTER(STAT_SaveGame_SerializeActor);
+	
 	FString ActorName;
 	FSoftClassPath Class;
 	FGuid SpawnID;

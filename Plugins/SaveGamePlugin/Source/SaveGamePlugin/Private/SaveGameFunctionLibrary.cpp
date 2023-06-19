@@ -58,28 +58,27 @@ bool USaveGameFunctionLibrary::SerializeActorTransform(FSaveGameArchive& Archive
 	if (Archive.IsValid() && IsValid(Actor))
 	{
 		const bool bIsMovable = Actor->IsRootComponentMovable();
-		FStructuredArchive::FRecord& Record = Archive.GetRecord();
+		const bool bIsLoading = Archive.GetRecord().GetUnderlyingArchive().IsLoading();
 
 		// Save into a slot only if the actor is movable
-		if (TOptional<FStructuredArchive::FSlot> TransformSlot = Record.TryEnterField(TEXT("Transform"), bIsMovable))
+		return (bIsLoading || bIsMovable) && Archive.SerializeField(TEXT("ActorTransform"), [&](FStructuredArchive::FSlot Slot)
 		{
-			const bool bIsLoading = Record.GetUnderlyingArchive().IsLoading();
-			FTransform Transform;
-
+			FTransform ActorTransform;
+			
 			if (!bIsLoading)
 			{
-				Transform = Actor->GetActorTransform();
+				ActorTransform = Actor->GetActorTransform();
 			}
 
 			// Serialize the transform
-			TransformSlot.GetValue() << Transform;
+			Slot << ActorTransform;
 
 			if (bIsLoading && bIsMovable)
 			{
 				// If the actor is movable, set its transform
-				Actor->SetActorTransform(Transform, false, nullptr, ETeleportType::TeleportPhysics);
+				Actor->SetActorTransform(ActorTransform, false, nullptr, ETeleportType::TeleportPhysics);
 			}
-		}
+		});
 	}
 
 	return false;
@@ -111,24 +110,22 @@ DEFINE_FUNCTION(USaveGameFunctionLibrary::execSerializeItem)
 	*(bool*)RESULT_PARAM = false;
 
 #if WITH_EDITOR
-	if (!ValueProperty->HasAnyPropertyFlags(CPF_Edit) || ValueProperty->HasAnyPropertyFlags(CPF_BlueprintReadOnly))
+	if (ValueProperty && (!ValueProperty->HasAnyPropertyFlags(CPF_Edit) || ValueProperty->HasAnyPropertyFlags(CPF_BlueprintReadOnly)))
 	{
 		BreakpointWithError(Stack,
 			FText::Format(NSLOCTEXT("SaveGame", "SerialiseItem_NotVariableException", "'{0}' connected to the Value pin is not an editable variable!"), ValueProperty->GetDisplayNameText()));
 	}
 	else
 #endif
-	if (Archive.IsValid())
+	if (ValueProperty && Archive.IsValid() && (IsLoading(Archive) || bSave))
 	{
-		FStructuredArchive::FRecord& Record = Archive.GetRecord();
-
-		if (const TOptional<FStructuredArchive::FSlot> PropertySlot = Record.TryEnterField(*ValueProperty->GetName(), bSave))
+		Archive.SerializeField(ValueProperty->GetFName(), [&](FStructuredArchive::FSlot Slot)
 		{
 			// Note: SerializeItem will not handle type conversions, though ConvertFromType will do this with some
 			// questionable address arithmetic 
-			ValueProperty->SerializeItem(PropertySlot.GetValue(), ValueAddress, nullptr);
+			ValueProperty->SerializeItem(Slot, ValueAddress, nullptr);
 			*(bool*)RESULT_PARAM = true;
-		}
+		});
 	}
 	
 	P_NATIVE_END;

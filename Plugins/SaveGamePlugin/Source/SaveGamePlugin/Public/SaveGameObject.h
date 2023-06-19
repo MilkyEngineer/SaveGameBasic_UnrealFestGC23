@@ -7,18 +7,20 @@
 #include "SaveGameObject.generated.h"
 
 USTRUCT(BlueprintType, BlueprintInternalUseOnly)
-struct FSaveGameArchive
+struct SAVEGAMEPLUGIN_API FSaveGameArchive
 {
 	GENERATED_BODY()
 
 public:
 	FSaveGameArchive()
 		: Record(nullptr)
+		, Object(nullptr)
+		, StartPosition(0)
+		, EndPosition(0)
 	{}
 
-	FSaveGameArchive(class FStructuredArchive::FRecord& InRecord)
-		: Record(&InRecord)
-	{}
+	FSaveGameArchive(class FStructuredArchive::FRecord& InRecord, UObject* InObject);
+	~FSaveGameArchive();
 
 	bool IsValid() const
 	{
@@ -30,10 +32,55 @@ public:
 		return *Record;
 	}
 
+	template<typename FSerializeFunc>
+	bool SerializeField(FName FieldName, FSerializeFunc SerializeFunction)
+	{
+		if (!IsValid())
+		{
+			return false;
+		}
+
+		FArchive& Archive = Record->GetUnderlyingArchive();
+
+		if (Archive.IsSaving() && Fields.Contains(FieldName))
+		{
+			// We don't want to double up on saving the same property
+			return false;
+		}
+
+		// Text formats don't deal with seeking very well
+		if (!Archive.IsTextFormat())
+		{
+			if (Archive.IsLoading())
+			{
+				if (!Fields.Contains(FieldName))
+				{
+					return false;
+				}
+
+				Archive.Seek(StartPosition + Fields[FieldName]);
+			}
+			else
+			{
+				// Use an offset, in case we need to shuffle data around later!
+				Fields.Add(FieldName, Archive.Tell() - StartPosition);
+			}
+		}
+
+		SerializeFunction(Record->EnterField(*FieldName.ToString()));
+
+		return true;
+	}
+	
 private:
 	FSaveGameArchive(FSaveGameArchive&) = delete;
-
+	
 	class FStructuredArchive::FRecord* Record;
+	TWeakObjectPtr<> Object;
+	uint64 StartPosition;
+	uint64 EndPosition;
+
+	TMap<FName, uint64> Fields;
 };
 
 // Ensure that our archive can't be copied
