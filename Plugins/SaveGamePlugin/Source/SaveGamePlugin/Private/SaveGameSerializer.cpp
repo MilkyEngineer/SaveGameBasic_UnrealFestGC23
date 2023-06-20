@@ -202,12 +202,32 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeHeader()
 	}
 	
 	RootRecord << SA_VALUE(TEXT("Map"), MapName);
+	
+	FEngineVersion EngineVersion;
+	FPackageFileVersion PackageVersion;
+
+	if (!bIsLoading)
+	{
+		EngineVersion = FEngineVersion::Current();
+		PackageVersion = GPackageFileUEVersion;
+	}
+
+	RootRecord << SA_VALUE(TEXT("EngineVersion"), EngineVersion);
 
 	if (!bIsTextFormat)
 	{
+		// This doesn't have a structured archive serialize method
+		Archive << PackageVersion;
+		
 		// We're a binary archive, so let's serialize where the version is
 		// so that we can read it before loading anything
 		RootRecord << SA_VALUE(TEXT("VersionsOffset"), VersionOffset);
+	}
+
+	if (bIsLoading)
+	{
+		Archive.SetEngineVer(EngineVersion);
+		Archive.SetUEVer(PackageVersion);
 	}
 }
 

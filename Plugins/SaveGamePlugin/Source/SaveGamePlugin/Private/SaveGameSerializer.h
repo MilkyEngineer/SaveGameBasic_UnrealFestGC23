@@ -22,6 +22,7 @@ public:
  * Archive data structured like so:
  * - Header
  *		- Map Name
+ *		- Engine Versions
  * - Actors
  *		- Actor Name #1:
  *			- Class: If spawned
