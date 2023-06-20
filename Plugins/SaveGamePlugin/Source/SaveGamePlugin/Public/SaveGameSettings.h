@@ -17,16 +17,15 @@ public:
 		, Enum(nullptr)
 	{}
 
+	/** A unique ID for this version, used by the Custom Version Container in a save game archive. Do not change! */
 	UPROPERTY(VisibleAnywhere, AdvancedDisplay)
 	FGuid ID;
 
+	/** The enum to use for versioning. System will use last value as the "latest version" number. Do not change! */
 	UPROPERTY(EditAnywhere)
 	TObjectPtr<UEnum> Enum;
 };
 
-/**
- * 
- */
 UCLASS(config=Game, defaultconfig, meta=(DisplayName="Save Game"))
 class SAVEGAMEPLUGIN_API USaveGameSettings : public UDeveloperSettings
 {
@@ -40,6 +39,10 @@ public:
 #endif
 
 protected:
+	/**
+	 * The list of possible versions and their corresponding enums. Must add versions here before
+	 * calling USaveGameFunctionLibrary::UseCustomVersion
+	 */
 	UPROPERTY(EditAnywhere, Config, Category=Version)
 	TArray<FSaveGameVersionInfo> Versions;
 

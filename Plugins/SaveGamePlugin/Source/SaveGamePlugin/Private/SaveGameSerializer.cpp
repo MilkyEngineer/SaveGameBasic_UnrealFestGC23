@@ -294,7 +294,8 @@ void TSaveGameSerializer<bIsLoading, bIsTextFormat>::SerializeActors()
 				{
 					const FString ActorSubPath = LEVEL_SUBPATH_PREFIX + ActorName;
 					
-					// We potentially have a spawned actor that other actors reference, be sure to update its redirects
+					// We potentially have a spawned actor that other actors reference
+					// If the name has changed, be sure to redirect the old actor path to the new one
 					ProxyArchive.AddRedirect(FSoftObjectPath(LevelAssetPath, ActorSubPath), FSoftObjectPath(Actor));
 				}
 				

@@ -36,7 +36,8 @@ bool USaveGameSubsystem::Save()
 	TSaveGameSerializer<false> BinarySerializer(this);
 	bool bSuccess = BinarySerializer.Save();
 
-#if WITH_TEXT_ARCHIVE_SUPPORT
+#if !UE_BUILD_SHIPPING && WITH_TEXT_ARCHIVE_SUPPORT
+	// This is for debug purposes only, we want to use binary serialization for smallest file sizes
 	TSaveGameSerializer<false, true> TextSerializer(this);
 	bSuccess &= TextSerializer.Save();
 #endif

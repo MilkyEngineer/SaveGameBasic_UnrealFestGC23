@@ -7,7 +7,7 @@
 #include "SaveGameSubsystem.generated.h"
 
 /**
- * 
+ * The subsystem that manages the lifetime of a save game.
  */
 UCLASS()
 class SAVEGAMEPLUGIN_API USaveGameSubsystem : public UGameInstanceSubsystem
