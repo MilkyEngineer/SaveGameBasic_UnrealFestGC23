@@ -9,6 +9,7 @@
 #include "Kismet2/KismetDebugUtilities.h"
 #include "Logging/MessageLog.h"
 #include "Misc/UObjectToken.h"
+#include "Blueprint/BlueprintExceptionInfo.h"
 
 void BreakpointWithError(FFrame& Stack, const FText& Text)
 {
@@ -27,11 +28,11 @@ void BreakpointWithError(FFrame& Stack, const FText& Text)
 				if(UObjectToken->GetObject().IsValid())
 				{
 					FKismetEditorUtilities::BringKismetToFocusAttentionOnObject(UObjectToken->GetObject().Get());
-				}	
+				}
 			}
 		}
 	};
-		
+
 	FMessageLog MessageLog("PIE");
 	MessageLog.Error()
 		->AddToken(FUObjectToken::Create(Node, Node->GetNodeTitle(ENodeTitleType::ListView))
@@ -64,7 +65,7 @@ bool USaveGameFunctionLibrary::SerializeActorTransform(FSaveGameArchive& Archive
 		return (bIsLoading || bIsMovable) && Archive.SerializeField(TEXT("ActorTransform"), [&](FStructuredArchive::FSlot Slot)
 		{
 			FTransform ActorTransform;
-			
+
 			if (!bIsLoading)
 			{
 				ActorTransform = Actor->GetActorTransform();
@@ -102,9 +103,9 @@ DEFINE_FUNCTION(USaveGameFunctionLibrary::execSerializeItem)
 
 	// If we're saving, should we serialize this value?
 	P_GET_UBOOL(bSave);
-	
+
 	P_FINISH;
-	
+
 	P_NATIVE_BEGIN;
 
 	*(bool*)RESULT_PARAM = false;
@@ -122,12 +123,12 @@ DEFINE_FUNCTION(USaveGameFunctionLibrary::execSerializeItem)
 		Archive.SerializeField(ValueProperty->GetFName(), [&](FStructuredArchive::FSlot Slot)
 		{
 			// Note: SerializeItem will not handle type conversions, though ConvertFromType will do this with some
-			// questionable address arithmetic 
+			// questionable address arithmetic
 			ValueProperty->SerializeItem(Slot, ValueAddress, nullptr);
 			*(bool*)RESULT_PARAM = true;
 		});
 	}
-	
+
 	P_NATIVE_END;
 }
 

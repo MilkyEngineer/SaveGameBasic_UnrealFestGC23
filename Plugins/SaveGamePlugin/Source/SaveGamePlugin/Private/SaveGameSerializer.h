@@ -7,6 +7,7 @@
 #endif
 
 #include "SaveGameProxyArchive.h"
+#include "Templates/ChooseClass.h"
 
 class USaveGameSubsystem;
 
@@ -46,11 +47,11 @@ class TSaveGameSerializer final : public FSaveGameSerializer
 
 	static_assert(!bIsLoading || !bIsTextFormat, "This serializer hasn't been implemented for text based loading, only saving!");
 	static_assert(WITH_TEXT_ARCHIVE_SUPPORT || !bIsTextFormat, "Engine isn't compiled with text archive support, cannot use text based TSaveGameSerializer");
-	
+
 	using FSaveGameFormatter = typename TChooseClass<bIsTextFormat && WITH_TEXT_ARCHIVE_SUPPORT,
 		typename TChooseClass<bIsLoading, FBinaryArchiveFormatter, FJsonArchiveOutputFormatter>::Result,
 		FBinaryArchiveFormatter>::Result;
-	
+
 public:
 	TSaveGameSerializer(USaveGameSubsystem* InSaveGameSubsystem);
 
@@ -59,7 +60,7 @@ public:
 
 private:
 	static FString GetSaveName();
-	
+
 	void OnMapLoad(UWorld* World);
 
 	/** Serializes information about the archive, like Map Name, and position of versioning information */
@@ -90,20 +91,20 @@ private:
 	 *
 	 * It also takes a lambda function that can optionally do some work or serialization. Ultimately, once this
 	 * lambda function is complete, SerializeActor will automatically seek the archive to the end of the actor's data.
-	 * 
+	 *
 	 * @param ActorMap The structured map that the actor data will be written to
 	 * @param Actor The live actor that will be serialized
 	 * @param BodyFunction A lambda function that will optionally do some work, whether that be serializing or spawning
 	 */
 	void SerializeActor(FStructuredArchive::FMap& ActorMap, AActor*& Actor, TFunction<void(const FString&, const FSoftClassPath&, const FGuid&, FStructuredArchive::FSlot&)>&& BodyFunction);
-	
+
 	const TWeakObjectPtr<USaveGameSubsystem> SaveGameSubsystem;
 	TArray<uint8> Data;
 	FSaveGameMemoryArchive Archive;
 	TSaveGameProxyArchive<bIsLoading> ProxyArchive;
 	FSaveGameFormatter Formatter;
 	FStructuredArchive StructuredArchive;
-	
+
 	FStructuredArchive::FSlot RootSlot;
 	FStructuredArchive::FRecord RootRecord;
 
